@@ -155,7 +155,7 @@ private:
 	int                                     m_nPosition;
     double                                  m_fLastTemp;
     CRSF                                    m_RSFController;
-    bool                                    mUiEnabled;
+    bool                                    m_bHoming;
 };
 
 

@@ -180,7 +180,6 @@ int	X2Focuser::execModalSettingsDialog(void)
     X2GUIExchangeInterface*			dx = NULL;//Comes after ui is loaded
     bool bPressedOK = false;
 
-    mUiEnabled = false;
 
     if (NULL == ui)
         return ERR_POINTER;
@@ -199,10 +198,8 @@ int	X2Focuser::execModalSettingsDialog(void)
     }
 
     //Display the user interface
-    mUiEnabled = true;
     if ((nErr = ui->exec(bPressedOK)))
         return nErr;
-    mUiEnabled = false;
 
     //Retreive values from the user interface
     if (bPressedOK) {
@@ -213,6 +210,44 @@ int	X2Focuser::execModalSettingsDialog(void)
 
 void X2Focuser::uiEvent(X2GUIExchangeInterface* uiex, const char* pszEvent)
 {
+    int nErr = SB_OK;
+    bool bHomingComplete = false;
+    char szErrorMessage[LOG_BUFFER_SIZE];
+    
+    if (!strcmp(pszEvent, "on_timer")) {
+        // is homing done ?
+        if(m_bHoming) {
+            bHomingComplete = false;
+            nErr = m_RSFController.isHomingComplete(bHomingComplete);
+            if(nErr) {
+                uiex->setEnabled("pushButton",true);
+                uiex->setEnabled("pushButtonOK",true);
+                snprintf(szErrorMessage, LOG_BUFFER_SIZE, "Error homing focuser : Error %d", nErr);
+                uiex->messageBox("RSF Homing", szErrorMessage);
+                m_bHoming = false;
+                return;;
+            }
+            
+            if(!bHomingComplete) {
+                return;
+            }
+            
+            // enable "ok" and "calibrate"
+            uiex->setEnabled("pushButton",true);
+            uiex->setEnabled("pushButtonOK",true);
+            m_bHoming = false;
+        }
+    }
+    else if (!strcmp(pszEvent, "on_pushButton_clicked")) {
+        // start homing
+        if(m_bLinked) {
+            // disable "ok" and "calibrate"
+            uiex->setEnabled("pushButton",false);
+            uiex->setEnabled("pushButtonOK",false);
+            m_RSFController.goHome();
+            m_bHoming = true;
+        }
+    }
 }
 
 #pragma mark - FocuserGotoInterface2

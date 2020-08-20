@@ -255,9 +255,17 @@ int CRSF::isGoToComplete(bool &bComplete)
     return nErr;
 }
 
-void CRSF::isHomingComplete(bool &bHoming)
+int CRSF::isHomingComplete(bool &bHoming)
 {
+    int nErr = PLUGIN_OK;
+    bool bMoving;
+    
+    nErr = isMotorMoving(bMoving);
+    
+    
     bHoming = m_bHoming;
+    return nErr;
+    
 }
 
 #pragma mark motor status command
@@ -270,19 +278,21 @@ int CRSF::isMotorMoving(bool &bMoving)
 	if(!m_bIsConnected)
 		return ERR_COMMNOLINK;
 
-    if(m_bMoving) {
-        nErr = RSFCommand(":Fs#", szResp, SERIAL_BUFFER_SIZE);
-        if(nErr)
-            return nErr;
-        if(strstr(szResp,"FS0")) {
-            m_bMoving = false;
-        }
-        else if (strstr(szResp,"FS1")) {
-            m_bMoving = true;
-        }
-        else
-            nErr = ERR_CMDFAILED;
+    bMoving = m_bMoving;
+
+    nErr = RSFCommand(":Fs#", szResp, SERIAL_BUFFER_SIZE);
+    if(nErr)
+        return nErr;
+
+    if(strstr(szResp,"FS0")) {
+        m_bMoving = false;
     }
+    else if (strstr(szResp,"FS1")) {
+        m_bMoving = true;
+    }
+    else
+        nErr = ERR_CMDFAILED;
+
     bMoving = m_bMoving;
     return nErr;
 }

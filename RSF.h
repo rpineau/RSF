@@ -69,7 +69,7 @@ public:
     // command complete functions
     int         isGoToComplete(bool &bComplete);
     int         isMotorMoving(bool &bMoving);
-    void        isHomingComplete(bool &bHoming);
+    int         isHomingComplete(bool &bHoming);
     
     // getter and setter
     void        setDebugLog(bool bEnable) {m_bDebugLog = bEnable; };
