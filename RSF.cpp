@@ -23,24 +23,37 @@ CRSF::CRSF()
 {
 
     m_pSerx = NULL;
-    m_pLogger = NULL;
-
-
-    m_bDebugLog = false;
     m_bIsConnected = false;
 
     m_nCurPos = 0;
     m_nTargetPos = 0;
     m_bMoving = false;
     m_bHoming = false;
+    m_bAbort = false;
+    
+    
+#ifdef PLUGIN_DEBUG
+#if defined(SB_WIN_BUILD)
+    m_sLogfilePath = getenv("HOMEDRIVE");
+    m_sLogfilePath += getenv("HOMEPATH");
+    m_sLogfilePath += "\\RSFLog.txt";
+#elif defined(SB_LINUX_BUILD)
+    m_sLogfilePath = getenv("HOME");
+    m_sLogfilePath += "/RSFLog.txt";
+#elif defined(SB_MAC_BUILD)
+    m_sLogfilePath = getenv("HOME");
+    m_sLogfilePath += "/RSFLog.txt";
+#endif
+    Logfile = fopen(m_sLogfilePath.c_str(), "w");
+#endif
 
-#ifdef	PLUGIN_DEBUG
-	Logfile = fopen(RSF_LOGFILENAME, "w");
-	ltime = time(NULL);
-	char *timestamp = asctime(localtime(&ltime));
-	timestamp[strlen(timestamp) - 1] = 0;
-	fprintf(Logfile, "[%s] CRSF Constructor Called.\n", timestamp);
-	fflush(Logfile);
+#if defined PLUGIN_DEBUG && PLUGIN_DEBUG >= 2
+    ltime = time(NULL);
+    timestamp = asctime(localtime(&ltime));
+    timestamp[strlen(timestamp) - 1] = 0;
+    fprintf(Logfile, "[%s] CRSF New Constructor Called\n", timestamp);
+    fprintf(Logfile, "[%s] [CRSF::CRSF] version %3.2f build 2020_08_28_09_35.\n", timestamp, DRIVER_VERSION);
+    fflush(Logfile);
 #endif
 
 }
@@ -108,6 +121,7 @@ void CRSF::Disconnect()
 int CRSF::getPosition(int &nPosition)
 {
     int nErr = PLUGIN_OK;
+    float fPos;
     char szResp[SERIAL_BUFFER_SIZE];
 
     if(!m_bIsConnected)
@@ -118,7 +132,8 @@ int CRSF::getPosition(int &nPosition)
         return nErr;
 
     // convert response
-    nPosition = atoi(szResp+3);
+    fPos = atof(szResp+3);
+    nPosition = int(fPos*1000);
     m_nCurPos = nPosition;
 
     return nErr;
@@ -138,7 +153,6 @@ int CRSF::getTemperature(double &dTemperature)
 {
     int nErr = PLUGIN_OK;
     char szResp[SERIAL_BUFFER_SIZE];
-    char szTmpBuf[SERIAL_BUFFER_SIZE];
 
     if(!m_bIsConnected)
         return ERR_COMMNOLINK;
@@ -148,7 +162,14 @@ int CRSF::getTemperature(double &dTemperature)
         return nErr;
 
     // convert response
-    dTemperature = atof(szTmpBuf+4);
+    dTemperature = atof(szResp+4);
+    #ifdef PLUGIN_DEBUG
+        ltime = time(NULL);
+        timestamp = asctime(localtime(&ltime));
+        timestamp[strlen(timestamp) - 1] = 0;
+        fprintf(Logfile, "[%s] [CRSF::getTemperature] dTemperature : %3.2f\n", timestamp, dTemperature);
+        fflush(Logfile);
+    #endif
 
     return nErr;
 }
@@ -158,7 +179,6 @@ int CRSF::gotoPosition(int nPos)
 {
     int nErr;
     char szCmd[SERIAL_BUFFER_SIZE];
-    char szTmpBuf[SERIAL_BUFFER_SIZE];
 
 	if(!m_bIsConnected)
 		return ERR_COMMNOLINK;
@@ -171,16 +191,23 @@ int CRSF::gotoPosition(int nPos)
     ltime = time(NULL);
     timestamp = asctime(localtime(&ltime));
     timestamp[strlen(timestamp) - 1] = 0;
-    fprintf(Logfile, "[%s] [CRSF::gotoPosition] goto position  : %d\n", timestamp, nPos);
+    fprintf(Logfile, "[%s] [CRSF::gotoPosition] goto position  : %+04d\n", timestamp, nPos);
     fflush(Logfile);
 #endif
 
-    snprintf(szCmd, SERIAL_BUFFER_SIZE, ":Fm%d#", nPos);
+    snprintf(szCmd, SERIAL_BUFFER_SIZE, ":Fm%+04d#", nPos);
     nErr = RSFCommand(szCmd, NULL, SERIAL_BUFFER_SIZE);
-    if(nErr)
+    if(nErr) {
+        #ifdef PLUGIN_DEBUG
+            ltime = time(NULL);
+            timestamp = asctime(localtime(&ltime));
+            timestamp[strlen(timestamp) - 1] = 0;
+            fprintf(Logfile, "[%s] [CRSF::gotoPosition] goto position  error : %d\n", timestamp, nErr);
+            fflush(Logfile);
+        #endif
         return nErr;
-
-    m_nTargetPos = atoi(szTmpBuf);
+    }
+    m_nTargetPos = nPos;
     m_bMoving = true;
     
     return nErr;
@@ -197,7 +224,7 @@ int CRSF::moveRelativeToPosision(int nSteps)
     ltime = time(NULL);
     timestamp = asctime(localtime(&ltime));
     timestamp[strlen(timestamp) - 1] = 0;
-    fprintf(Logfile, "[%s] CRSF::gotoPosition goto relative position  : %d\n", timestamp, nSteps);
+    fprintf(Logfile, "[%s] [CRSF::moveRelativeToPosision] move relative position  : %+d\n", timestamp, nSteps);
     fflush(Logfile);
 #endif
 
@@ -229,41 +256,121 @@ int CRSF::goHome()
     return nErr;
 }
 
+int CRSF::Abort()
+{
+    int nErr = PLUGIN_OK;
+    
+    #ifdef PLUGIN_DEBUG
+        ltime = time(NULL);
+        timestamp = asctime(localtime(&ltime));
+        timestamp[strlen(timestamp) - 1] = 0;
+        fprintf(Logfile, "[%s] [CRSF::Abort] tring to stop all\n", timestamp);
+        fflush(Logfile);
+    #endif
+    m_bHoming = false;
+    m_bMoving = false;
+    m_bAbort = true;
+    
+    m_nTargetPos = m_nCurPos;
+
+    return nErr;
+}
+
 #pragma mark command complete functions
 
 int CRSF::isGoToComplete(bool &bComplete)
 {
     int nErr = PLUGIN_OK;
     bool bMoving = false;
+    int minBound, maxBound;
     
 	if(!m_bIsConnected)
 		return ERR_COMMNOLINK;
+    
+#ifdef PLUGIN_DEBUG
+    ltime = time(NULL);
+    timestamp = asctime(localtime(&ltime));
+    timestamp[strlen(timestamp) - 1] = 0;
+    fprintf(Logfile, "[%s] [CRSF::isGoToComplete]\n", timestamp);
+    fflush(Logfile);
+#endif
 
+    if(m_bAbort) {
+        bComplete = true;
+        m_nTargetPos = m_nCurPos;
+        m_bAbort = false;
+        return nErr;
+    }
+    
     bComplete = false;
     nErr = isMotorMoving(bMoving);
-    if(nErr)
+    if(nErr) {
+        #ifdef PLUGIN_DEBUG
+            ltime = time(NULL);
+            timestamp = asctime(localtime(&ltime));
+            timestamp[strlen(timestamp) - 1] = 0;
+            fprintf(Logfile, "[%s] [CRSF::isGoToComplete] error when calling isMotorMoving()\n", timestamp);
+            fflush(Logfile);
+        #endif
         return ERR_CMDFAILED;
-    
+    }
     if(bMoving)
         return nErr;
     
     getPosition(m_nCurPos);
-    if(m_nCurPos == m_nTargetPos)
+    minBound = m_nCurPos - 10;
+    maxBound = m_nCurPos + 10;
+    if(minBound <= m_nTargetPos && m_nTargetPos <= maxBound)
         bComplete = true;
     else
         bComplete = false;
+
+    #ifdef PLUGIN_DEBUG
+        ltime = time(NULL);
+        timestamp = asctime(localtime(&ltime));
+        timestamp[strlen(timestamp) - 1] = 0;
+        fprintf(Logfile, "[%s] [CRSF::isGoToComplete] bComplete = %s\n", timestamp, bComplete?"True":"False");
+        fflush(Logfile);
+    #endif
+
     return nErr;
 }
 
-int CRSF::isHomingComplete(bool &bHoming)
+int CRSF::isHomingComplete(bool &bHomingComplete)
 {
     int nErr = PLUGIN_OK;
     bool bMoving;
-    
+
+#ifdef PLUGIN_DEBUG
+    ltime = time(NULL);
+    timestamp = asctime(localtime(&ltime));
+    timestamp[strlen(timestamp) - 1] = 0;
+    fprintf(Logfile, "[%s] [CRSF::isHomingComplete]\n", timestamp);
+    fflush(Logfile);
+#endif
+
+    if(m_bAbort) {
+        bHomingComplete = false;
+        m_nTargetPos = m_nCurPos;
+        m_bAbort = false;
+        return nErr;
+    }
+
     nErr = isMotorMoving(bMoving);
     
-    
-    bHoming = m_bHoming;
+    if(bMoving)
+        bHomingComplete = false;
+    else {
+        bHomingComplete = !m_bHoming;
+    }
+    #ifdef PLUGIN_DEBUG
+        ltime = time(NULL);
+        timestamp = asctime(localtime(&ltime));
+        timestamp[strlen(timestamp) - 1] = 0;
+        fprintf(Logfile, "[%s] [CRSF::isHomingComplete] bHomingComplete = %s\n", timestamp, bHomingComplete?"True":"False");
+        fflush(Logfile);
+    #endif
+
     return nErr;
     
 }
@@ -278,6 +385,15 @@ int CRSF::isMotorMoving(bool &bMoving)
 	if(!m_bIsConnected)
 		return ERR_COMMNOLINK;
 
+#ifdef PLUGIN_DEBUG
+    ltime = time(NULL);
+    timestamp = asctime(localtime(&ltime));
+    timestamp[strlen(timestamp) - 1] = 0;
+    fprintf(Logfile, "[%s] [CRSF::isMotorMoving]\n", timestamp);
+    fflush(Logfile);
+#endif
+
+    
     bMoving = m_bMoving;
 
     nErr = RSFCommand(":Fs#", szResp, SERIAL_BUFFER_SIZE);
@@ -290,10 +406,25 @@ int CRSF::isMotorMoving(bool &bMoving)
     else if (strstr(szResp,"FS1")) {
         m_bMoving = true;
     }
-    else
+    else {
+        #ifdef PLUGIN_DEBUG
+            ltime = time(NULL);
+            timestamp = asctime(localtime(&ltime));
+            timestamp[strlen(timestamp) - 1] = 0;
+            fprintf(Logfile, "[%s] [CRSF::isMotorMoving] error szResp = %s \n", timestamp, szResp);
+            fflush(Logfile);
+        #endif
         nErr = ERR_CMDFAILED;
-
+    }
     bMoving = m_bMoving;
+#ifdef PLUGIN_DEBUG
+    ltime = time(NULL);
+    timestamp = asctime(localtime(&ltime));
+    timestamp[strlen(timestamp) - 1] = 0;
+    fprintf(Logfile, "[%s] [CRSF::isMotorMoving] bMoving = %s\n", timestamp, bMoving?"True":"False");
+    fflush(Logfile);
+#endif
+
     return nErr;
 }
 
@@ -312,10 +443,6 @@ int CRSF::RSFCommand(const char *pszszCmd, char *pszResult, int nResultMaxLen)
 	if(!m_bIsConnected)
 		return ERR_COMMNOLINK;
 
-    if (m_bDebugLog && m_pLogger) {
-        snprintf(m_szLogBuffer,LOG_BUFFER_SIZE,"[CRSF::RSFCommand] Sending %s\n",pszszCmd);
-        m_pLogger->out(m_szLogBuffer);
-    }
 #ifdef PLUGIN_DEBUG
 	ltime = time(NULL);
 	timestamp = asctime(localtime(&ltime));
@@ -327,31 +454,18 @@ int CRSF::RSFCommand(const char *pszszCmd, char *pszResult, int nResultMaxLen)
     m_pSerx->flushTx();
 
     if(nErr){
-        if (m_bDebugLog && m_pLogger) {
-            snprintf(m_szLogBuffer,LOG_BUFFER_SIZE,"[CRSF::RSFCommand] writeFile Error.\n");
-            m_pLogger->out(m_szLogBuffer);
-        }
         return nErr;
     }
 
     if(pszResult) {
         // read response
-        if (m_bDebugLog && m_pLogger) {
-            snprintf(m_szLogBuffer,LOG_BUFFER_SIZE,"[CRSF::RSFCommand] Getting response.\n");
-            m_pLogger->out(m_szLogBuffer);
-        }
-        if(m_bHoming || m_bHoming) { // check if we got an async response
+        if(m_bMoving || m_bHoming) { // check if we got an async response
             nErr = readAllResponses(szResp, SERIAL_BUFFER_SIZE);
         }
         else {
             nErr = readResponse(szResp, SERIAL_BUFFER_SIZE);
         }
-        if(nErr){
-            if (m_bDebugLog && m_pLogger) {
-                snprintf(m_szLogBuffer,LOG_BUFFER_SIZE,"[CRSF::RSFCommand] readResponse Error.\n");
-                m_pLogger->out(m_szLogBuffer);
-            }
-        }
+
 #ifdef PLUGIN_DEBUG
 		ltime = time(NULL);
 		timestamp = asctime(localtime(&ltime));
@@ -382,16 +496,20 @@ int CRSF::readResponse(char *pszRespBuffer, int nBufferLen, int nTimeout)
 	if(!m_bIsConnected)
 		return ERR_COMMNOLINK;
 
+#if defined PLUGIN_DEBUG && PLUGIN_DEBUG >= 3
+            ltime = time(NULL);
+            timestamp = asctime(localtime(&ltime));
+            timestamp[strlen(timestamp) - 1] = 0;
+            fprintf(Logfile, "[%s] [CRSF::readResponse] ****************\n", timestamp);
+            fflush(Logfile);
+#endif
+
     memset(pszRespBuffer, 0, (size_t) nBufferLen);
     pszBufPtr = pszRespBuffer;
 
     do {
         nErr = m_pSerx->readFile(pszBufPtr, 1, ulBytesRead, nTimeout);
         if(nErr) {
-            if (m_bDebugLog && m_pLogger) {
-                snprintf(m_szLogBuffer,LOG_BUFFER_SIZE,"[CRSF::readResponse] readFile Error.\n");
-                m_pLogger->out(m_szLogBuffer);
-            }
 #if defined PLUGIN_DEBUG && PLUGIN_DEBUG >= 3
             ltime = time(NULL);
             timestamp = asctime(localtime(&ltime));
@@ -403,10 +521,6 @@ int CRSF::readResponse(char *pszRespBuffer, int nBufferLen, int nTimeout)
         }
 
         if (ulBytesRead !=1) {// timeout
-            if (m_bDebugLog && m_pLogger) {
-                snprintf(m_szLogBuffer,LOG_BUFFER_SIZE,"[CRSF::readResponse] readFile Timeout.\n");
-                m_pLogger->out(m_szLogBuffer);
-            }
 #if defined PLUGIN_DEBUG && PLUGIN_DEBUG >= 3
 			ltime = time(NULL);
 			timestamp = asctime(localtime(&ltime));
@@ -418,11 +532,7 @@ int CRSF::readResponse(char *pszRespBuffer, int nBufferLen, int nTimeout)
             break;
         }
         ulTotalBytesRead += ulBytesRead;
-        if (m_bDebugLog && m_pLogger) {
-            snprintf(m_szLogBuffer,LOG_BUFFER_SIZE,"[CRSF::readResponse] ulBytesRead = %lu\n",ulBytesRead);
-            m_pLogger->out(m_szLogBuffer);
-        }
-#if defined PLUGIN_DEBUG && PLUGIN_DEBUG >= 3
+#if defined PLUGIN_DEBUG && PLUGIN_DEBUG >= 4
         ltime = time(NULL);
         timestamp = asctime(localtime(&ltime));
         timestamp[strlen(timestamp) - 1] = 0;
@@ -442,13 +552,37 @@ int CRSF::readAllResponses(char *respBuffer, unsigned int bufferLen)
     int nErr = PLUGIN_OK;
     int nbByteWaiting = 0;
     char szResp[SERIAL_BUFFER_SIZE];
+    int nbTimeout = 0;
+    
+#if defined PLUGIN_DEBUG && PLUGIN_DEBUG >= 3
+    ltime = time(NULL);
+    timestamp = asctime(localtime(&ltime));
+    timestamp[strlen(timestamp) - 1] = 0;
+    fprintf(Logfile, "[%s] [CRSF::readAllResponses] ++++++++++++++++\n", timestamp);
+    fflush(Logfile);
+#endif
 
     memset(respBuffer, 0, bufferLen);
     do {
         m_pSerx->bytesWaitingRx(nbByteWaiting);
+
+#if defined PLUGIN_DEBUG && PLUGIN_DEBUG >= 3
+        ltime = time(NULL);
+        timestamp = asctime(localtime(&ltime));
+        timestamp[strlen(timestamp) - 1] = 0;
+        fprintf(Logfile, "[%s] [CRSF::readAllResponses] nbByteWaiting = %d\n", timestamp, nbByteWaiting);
+        fflush(Logfile);
+#endif
         if(nbByteWaiting) {
             memset(szResp, 0, SERIAL_BUFFER_SIZE);
             nErr = readResponse(szResp, bufferLen);
+    #ifdef PLUGIN_DEBUG
+            ltime = time(NULL);
+            timestamp = asctime(localtime(&ltime));
+            timestamp[strlen(timestamp) - 1] = 0;
+            fprintf(Logfile, "[%s] [CRSF::readAllResponses] response \"%s\"\n", timestamp, szResp);
+            fflush(Logfile);
+    #endif
             if(strstr(szResp,":FM")) {// goto is done
                 m_bMoving = false;
             }
@@ -459,8 +593,19 @@ int CRSF::readAllResponses(char *respBuffer, unsigned int bufferLen)
                 strncpy(respBuffer, szResp, bufferLen);
                 return nErr;
             }
+        } else { // we might need to wait a bit
+            m_pSleeper->sleep(100);
+            nbTimeout++;
+            #if defined PLUGIN_DEBUG && PLUGIN_DEBUG >= 3
+                    ltime = time(NULL);
+                    timestamp = asctime(localtime(&ltime));
+                    timestamp[strlen(timestamp) - 1] = 0;
+                    fprintf(Logfile, "[%s] [CRSF::readAllResponses] nbTimeout = %d\n", timestamp, nbTimeout);
+                    fflush(Logfile);
+            #endif
+
         }
-    } while(nbByteWaiting);
+    } while(nbTimeout<3);
 
     return nErr;
 }

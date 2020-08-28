@@ -40,7 +40,6 @@ X2Focuser::X2Focuser(const char* pszDisplayName,
     if (m_pIniUtil) {
     }
 	m_RSFController.SetSerxPointer(m_pSerX);
-	m_RSFController.setLogger(m_pLogger);
     m_RSFController.setSleeper(m_pSleeper);
 }
 
@@ -108,7 +107,7 @@ double X2Focuser::driverInfoVersion(void) const
 
 void X2Focuser::deviceInfoNameShort(BasicStringInterface& str) const
 {
-    str="AAF2";
+    str="RSF";
 }
 
 void X2Focuser::deviceInfoNameLong(BasicStringInterface& str) const				
@@ -118,7 +117,7 @@ void X2Focuser::deviceInfoNameLong(BasicStringInterface& str) const
 
 void X2Focuser::deviceInfoDetailedDescription(BasicStringInterface& str) const		
 {
-	str = "AAF2 Controller";
+	str = "RSF Controller";
 }
 
 void X2Focuser::deviceInfoFirmwareVersion(BasicStringInterface& str)				
@@ -128,7 +127,7 @@ void X2Focuser::deviceInfoFirmwareVersion(BasicStringInterface& str)
 
 void X2Focuser::deviceInfoModel(BasicStringInterface& str)							
 {
-    str="AAF2";
+    str="RSF";
 }
 
 #pragma mark - LinkInterface
@@ -281,10 +280,10 @@ int	X2Focuser::focMaximumLimit(int& nPosLimit)
 
 int	X2Focuser::focAbort()								
 {
-
     if(!m_bLinked)
         return NOT_CONNECTED;
 
+    m_RSFController.Abort();
     return SB_OK;
 }
 
@@ -361,7 +360,7 @@ int X2Focuser::focTemperature(double &dTemperature)
     // this prevent us from asking the temperature too often
     static CStopWatch timer;
 
-    if(timer.GetElapsedSeconds() > 30.0f || m_fLastTemp < -99.0f) {
+    if(timer.GetElapsedSeconds() > 10.0f || m_fLastTemp < -99.0f) {
         nErr = m_RSFController.getTemperature(m_fLastTemp);
         timer.Reset();
     }

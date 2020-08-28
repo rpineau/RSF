@@ -23,19 +23,9 @@
 #include "../../licensedinterfaces/loggerinterface.h"
 #include "../../licensedinterfaces/sleeperinterface.h"
 
-#define PLUGIN_DEBUG 2
+// #define PLUGIN_DEBUG 3
 
 #define DRIVER_VERSION      1.0
-
-#ifdef PLUGIN_DEBUG
-#if defined(SB_WIN_BUILD)
-#define RSF_LOGFILENAME "C:\\RSFLog.txt"
-#elif defined(SB_LINUX_BUILD)
-#define RSF_LOGFILENAME "/tmp/RSFLog.txt"
-#elif defined(SB_MAC_BUILD)
-#define RSF_LOGFILENAME "/tmp/RSFLog.txt"
-#endif
-#endif
 
 
 #define SERIAL_BUFFER_SIZE 256
@@ -58,7 +48,6 @@ public:
     bool        IsConnected(void) { return m_bIsConnected; };
 
     void        SetSerxPointer(SerXInterface *p) { m_pSerx = p; };
-    void        setLogger(LoggerInterface *pLogger) { m_pLogger = pLogger; };
     void        setSleeper(SleeperInterface *pSleeper) { m_pSleeper = pSleeper; };
 
     // move commands
@@ -72,13 +61,13 @@ public:
     int         isHomingComplete(bool &bHoming);
     
     // getter and setter
-    void        setDebugLog(bool bEnable) {m_bDebugLog = bEnable; };
-
     int         getTemperature(double &dTemperature);
     int         getPosition(int &nPosition);
     int         getMinPosLimit(void);
     int         getMaxPosLimit(void);
 
+    int         Abort();
+    
 protected:
 
     int             RSFCommand(const char *pszCmd, char *pszResult, int nResultMaxLen);
@@ -86,10 +75,8 @@ protected:
     int             readAllResponses(char *respBuffer, unsigned int bufferLen);
     
     SerXInterface   *m_pSerx;
-    LoggerInterface *m_pLogger;
     SleeperInterface    *m_pSleeper;
 
-    bool            m_bDebugLog;
     bool            m_bIsConnected;
     char            m_szFirmwareVersion[SERIAL_BUFFER_SIZE];
     char            m_szLogBuffer[LOG_BUFFER_SIZE];
@@ -98,12 +85,14 @@ protected:
     int             m_nTargetPos;
     bool            m_bMoving;
     bool            m_bHoming;
-
+    bool            m_bAbort;
+    
 #ifdef PLUGIN_DEBUG
-	// timestamp for logs
-	char *timestamp;
-	time_t ltime;
-	FILE *Logfile;	  // LogFile
+    std::string m_sLogfilePath;
+    // timestamp for logs
+    char *timestamp;
+    time_t ltime;
+    FILE *Logfile;      // LogFile
 #endif
 
 };
