@@ -40,13 +40,20 @@ DirExistsWarning=no
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[Dirs]
+Name: "{app}\Plugins\FocuserPlugins";
+Name: "{app}\Plugins64\FocuserPlugins";
+
 [Files]
 ; WIll also need to customise these!
-Source: "focuserlist RSF.txt"; DestDir: "{app}\Miscellaneous Files"; Flags: ignoreversion
-Source: "libRSF\Release\libRSF.dll"; DestDir: "{app}\Plugins\FocuserPlugins"; Flags: ignoreversion
-Source: "RSF.ui"; DestDir: "{app}\Plugins\FocuserPlugins"; Flags: ignoreversion
-; NOTE: Don't use "Flags: ignoreversion" on any shared system files
-; msgBox('Do you want to install MyProg.exe to ' + ExtractFilePath(CurrentFileName) + '?', mbConfirmation, MB_YESNO)
+Source: "focuserlist RSF.txt";                  DestDir: "{app}\Miscellaneous Files"; Flags: ignoreversion
+Source: "focuserlist RSF.txt";                  DestDir: "{app}\Miscellaneous Files"; DestName: "focuserlist64 RSF.txt"; Flags: ignoreversion
+; 32 bit
+Source: "libRSF\Win32\Release\libRSF.dll";      DestDir: "{app}\Plugins\FocuserPlugins"; Flags: ignoreversion
+Source: "RSF.ui";                               DestDir: "{app}\Plugins\FocuserPlugins"; Flags: ignoreversion
+;64 bit
+Source: "libRSF\x64\Release\libRSF.dll";        DestDir: "{app}\Plugins64\FocuserPlugins"; Flags: ignoreversion; Check: DirExists(ExpandConstant('{app}\Plugins64\FocuserPlugins'))
+Source: "RSF.ui";                               DestDir: "{app}\Plugins64\FocuserPlugins"; Flags: ignoreversion; Check: DirExists(ExpandConstant('{app}\Plugins64\FocuserPlugins'))
 
 
 [Code]
